@@ -1,0 +1,208 @@
+--To Create the View--
+
+DROP VIEW IF EXISTS forestation ;
+CREATE VIEW forestation
+AS
+(SELECT forest_area.country_code, forest_area.year, forest_area.forest_area_sqkm, 
+	land_area.country_name, land_area.total_area_sq_mi * 2.59 AS total_area_sqkm, forest_area_sqkm / (total_area_sq_mi * 2.59) * 100 as forest_percentage,
+	regions.region, regions.income_group
+FROM forest_area 
+JOIN land_area 
+ON forest_area.country_code=land_area.country_code AND forest_area.year = land_area.year
+JOIN regions  
+ON land_area.country_code=regions.country_code);
+
+--TASK 1
+
+--a. What was the total forest area (in sq km) of the world in 1990? Please keep in mind that you can use the country record denoted as “World" in the region table.
+
+
+SELECT forest_area_sqkm, year
+FROM forestation
+WHERE country_name = 'World' and year = 1990;
+
+--b. What was the total forest area (in sq km) of the world in 2016? Please keep in mind that you can use the country record in the table is denoted as “World.”
+
+SELECT forest_area_sqkm, year
+FROM forestation
+WHERE country_name = 'World' and year = 2016;
+
+--c. What was the change (in sq km) in the forest area of the world from 1990 to 2016?
+
+
+SELECT
+(SELECT forest_area_sqkm
+FROM forestation
+WHERE country_name = 'World' and year = 1990)
+-(SELECT forest_area_sqkm
+ FROM forestation
+ WHERE country_name = 'World' and year = 2016) as difference;
+
+--d. What was the percent change in forest area of the world between 1990 and 2016?
+
+WITH area_2016 
+AS
+(SELECT forest_area_sqkm as f_area_2016
+ FROM forestation
+ WHERE country_name = 'World' and year = 2016),
+area_1990
+AS
+(SELECT forest_area_sqkm as f_area_1990
+FROM forestation
+WHERE country_name = 'World' and year = 1990),
+diff 
+AS (SELECT f_area_1990, f_area_2016, f_area_1990 - f_area_2016 diff, (f_area_2016 - f_area_1990)/f_area_1990 * 100 as diff_percentage
+FROM area_1990, area_2016)
+SELECT  f_area_2016, f_area_1990, diff, round(diff_percentage :: numeric, 2)
+from diff;
+
+--e. If you compare the amount of forest area lost between 1990 and 2016, to which country's total area in 2016 is it closest to?
+
+SELECT distinct country_name, total_area_sqkm
+FROM forestation
+where total_area_sqkm between 1267000 and 1324449 AND year = 2016;
+
+--TASK 2 
+
+--a. What was the percent forest of the entire world in 2016? Which region had the HIGHEST percent forest in 2016, and which had the LOWEST, to 2 decimal places?
+
+SELECT country_name, total_area_sqkm, forest_area_sqkm, ROUND(((forest_area_sqkm/total_area_sqkm)*100)::numeric,2) AS percent_forestation 
+FROM forestation
+WHERE year = 2016 AND country_name = 'World';
+
+--b. What was the percent forest of the entire world in 1990? Which region had the HIGHEST percent forest in 1990, and which had the LOWEST, to 2 decimal places?
+
+SELECT region, 
+ROUND((SUM(forest_area_sqkm)*100/SUM(total_area_sqkm))::numeric,2) AS percent_forestation 
+FROM forestation
+WHERE year = 2016
+GROUP BY region 
+ORDER BY percent_forestation DESC;
+
+--c. Based on the table you created, which regions of the world DECREASED in forest area from 1990 to 2016?
+
+SELECT region, 
+(SUM(forest_area_sqkm)*100/SUM(total_area_sqkm)) AS percent_forestation_2016
+FROM forestation
+WHERE year = 2016
+GROUP BY region 
+ORDER BY percent_forestation_2016 DESC;
+
+--TASK 3
+
+--a. Which 5 countries saw the largest amount decrease in forest area from 1990 to 2016? What was the difference in forest area for each?
+
+WITH countries_2016 AS (
+
+SELECT forest_area_sqkm AS c_2016, country_name, region
+FROM forestation
+WHERE year = 2016
+AND forest_area_sqkm IS NOT NULL),
+
+countries_1990 AS (
+
+SELECT forest_area_sqkm AS c_1990, country_name, region
+FROM forestation
+WHERE year = 1990
+AND forest_area_sqkm IS NOT NULL)
+
+SELECT country_name, (c_2016 - c_1990) AS forest_change,
+((c_2016 - c_1990)*100/c_1990)  AS fp_change, countries_1990.region
+FROM countries_1990 
+JOIN countries_2016 
+USING (country_name)
+ORDER BY forest_change 
+LIMIT 6;
+
+
+--b. Which 5 countries saw the largest percent decrease in forest area from 1990 to 2016? What was the percent change to 2 decimal places for each?
+
+WITH countries_2016 AS (
+
+SELECT forest_area_sqkm AS c_2016, country_name, region
+FROM forestation
+WHERE year = 2016
+AND forest_area_sqkm IS NOT NULL),
+
+countries_1990 AS (
+
+SELECT forest_area_sqkm AS c_1990, country_name, region
+FROM forestation
+WHERE year = 1990
+AND forest_area_sqkm IS NOT NULL)
+
+SELECT country_name, (c_2016 - c_1990) AS forest_change,
+round(((c_2016 - c_1990)*100/c_1990):: numeric, 2)  AS forest_percent_change, countries_1990.region
+FROM countries_1990 
+JOIN countries_2016 
+USING (country_name)
+ORDER BY forest_change 
+LIMIT 5;
+
+--c. If countries were grouped by percent forestation in quartiles, which group had the most countries in it in 2016?quartiles:
+
+--d.
+
+--e.
+
+WITH t1 AS (
+
+SELECT f.country_name,f.forest_percentage, f.region,
+
+CASE
+WHEN f.forest_percentage >= 75 THEN '75%-100%'
+WHEN f.forest_percentage >= 50 THEN '50%-75%'
+WHEN f.forest_percentage >= 25 THEN '25%-50%'
+ELSE '0%-25%'
+END AS quartiles
+FROM forestation f
+WHERE year = 2016
+AND f.forest_percentage IS NOT NULL
+AND country_name !='World')
+
+SELECT country_name, region, quartiles, forest_percentage
+FROM t1
+GROUP BY country_name, region, forest_percentage, quartiles
+ORDER BY forest_percentage desc;
+
+--Write out a set of recommendations as an analyst on the ForestQuery team. 
+--●	What have you learned from the World Bank data? 
+--●	Which countries should we focus on over others?
+
+
+
+Between 1990 and 2016, the world has lost 41282694.9 square kilometers of forests. This is a decrease of 3.2% of the world's total forest as is an area the size of Peru that has been lost. 
+Dispite this grim outlook, the regions of South Asia and Middle East & North Africa have increased in their total forest area with China seeing an increase of 527229 square kilometers. 
+The largest country of concern is Brazil which has lost 1324449 square kilometers and every effort should now be made to reverse this decline. The other countries that have seen the largest decline in their forest areas are Indonesia, Myanmar, Nigeria and Tanzania. When considering those countries that have lost the largest percentage of their forest, Togo is an alarming example which has lost over 75% of its total forest. The countries with the four highest rates of deforestation are all in the region of Sub-Saharan Africa. This is a region that focus should be applied to. With the success story of China, increasing the total forest area it is recommended to employ the strategies used by China in the countries with the highest deforestation figures in order to collaborate with the most at risk countries and regions in an effort to revers this staggering decline of the World's forests.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
